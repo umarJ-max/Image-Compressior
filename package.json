@@ -1,0 +1,36 @@
+{
+  "name": "image-compressor-umar-j",
+  "version": "1.0.0",
+  "description": "Professional image compressor tool by Umar J - Compress images without quality loss",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static site - no build process needed'",
+    "start": "vercel dev"
+  },
+  "keywords": [
+    "image",
+    "compressor",
+    "optimization",
+    "compression",
+    "webp",
+    "jpeg",
+    "png",
+    "client-side",
+    "privacy",
+    "umar-j"
+  ],
+  "author": "Umar J",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umarj/image-compressor"
+  },
+  "homepage": "https://image-compressor-umar-j.vercel.app",
+  "devDependencies": {
+    "@vercel/node": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

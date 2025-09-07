@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional image compressor tool by Umar J - Compress images without quality loss">
+    <meta name="keywords" content="image compressor, image optimization, file compression, Umar J">
+    <meta name="author" content="Umar J">
+    <title>Image Compressor - Umar J</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🖼️</text></svg>">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="brand">
+                <h1>Image Compressor</h1>
+                <span class="brand-author">by Umar J</span>
+            </div>
+            <nav class="nav">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#about" class="nav-link">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <section class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <h2 class="hero-title">Compress Images Without Quality Loss</h2>
+                    <p class="hero-subtitle">Professional-grade image compression tool that reduces file size while maintaining visual quality. Secure, fast, and completely client-side processing.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="compressor-section">
+            <div class="container">
+                <div class="compressor-card">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-content">
+                            <div class="upload-icon">📁</div>
+                            <h3>Drop your images here</h3>
+                            <p>or click to browse</p>
+                            <button type="button" class="upload-btn" id="uploadBtn">Choose Files</button>
+                            <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
+                        </div>
+                    </div>
+
+                    <div class="controls" id="controls" style="display: none;">
+                        <div class="quality-control">
+                            <label for="qualitySlider">Compression Quality</label>
+                            <div class="slider-container">
+                                <input type="range" id="qualitySlider" min="10" max="100" value="80" class="slider">
+                                <span id="qualityValue" class="quality-value">80%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="format-control">
+                            <label for="formatSelect">Output Format</label>
+                            <select id="formatSelect" class="format-select">
+                                <option value="original">Keep Original</option>
+                                <option value="jpeg">JPEG</option>
+                                <option value="png">PNG</option>
+                                <option value="webp">WebP</option>
+                            </select>
+                        </div>
+
+                        <button type="button" class="compress-btn" id="compressBtn">Compress Images</button>
+                    </div>
+
+                    <div class="progress-container" id="progressContainer" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <span class="progress-text" id="progressText">Processing...</span>
+                    </div>
+
+                    <div class="results" id="results" style="display: none;">
+                        <h3>Compression Results</h3>
+                        <div class="results-grid" id="resultsGrid"></div>
+                        <button type="button" class="download-all-btn" id="downloadAllBtn">Download All</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="container">
+                <h2>Why Choose Our Image Compressor?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <h3>100% Secure</h3>
+                        <p>All processing happens in your browser. Your images never leave your device.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Lightning Fast</h3>
+                        <p>Client-side compression means instant results without server delays.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🎯</div>
+                        <h3>Quality Control</h3>
+                        <p>Fine-tune compression levels to get the perfect balance of size and quality.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📱</div>
+                        <h3>Multiple Formats</h3>
+                        <p>Support for JPEG, PNG, WebP formats with batch processing.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="about" class="about">
+            <div class="container">
+                <h2>About This Tool</h2>
+                <p>Created by <strong>Umar J</strong>, this image compressor is designed with privacy and performance in mind. Using advanced client-side compression algorithms, we ensure your images are processed securely without any data transmission to external servers.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Image Compressor by <strong>Umar J</strong>. All rights reserved.</p>
+            <p class="footer-note">Your privacy is protected - all processing happens locally in your browser.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
