@@ -25,11 +25,5 @@
     "type": "git",
     "url": "https://github.com/umarJ-max/Image-Compressior"
   },
-  "homepage": "https://image-compressor-umar-j.vercel.app",
-  "devDependencies": {
-    "@vercel/node": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "homepage": "https://image-compressor-umar-j.vercel.app"
 }
