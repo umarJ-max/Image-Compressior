@@ -24,7 +24,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/umarj/image-compressor"
+    "url": "https://github.com/umarJ-max/Image-Compressior"
   },
   "homepage": "https://image-compressor-umar-j.vercel.app",
   "devDependencies": {
