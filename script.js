@@ -3,6 +3,8 @@ class ImageCompressor {
         this.initializeElements();
         this.setupEventListeners();
         this.compressedImages = [];
+        this.selectedFiles = [];
+        this.isProcessing = false;
     }
 
     initializeElements() {
@@ -23,9 +25,21 @@ class ImageCompressor {
     }
 
     setupEventListeners() {
-        // File input events
-        this.uploadBtn.addEventListener('click', () => this.fileInput.click());
-        this.uploadArea.addEventListener('click', () => this.fileInput.click());
+        // File input events - prevent double triggering
+        this.uploadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!this.isProcessing) {
+                this.fileInput.click();
+            }
+        });
+        
+        this.uploadArea.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!this.isProcessing && e.target === this.uploadArea) {
+                this.fileInput.click();
+            }
+        });
+        
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
 
         // Drag and drop events
@@ -33,9 +47,15 @@ class ImageCompressor {
         this.uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
         this.uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
 
-        // Quality slider
+        // Quality slider with live preview
         this.qualitySlider.addEventListener('input', (e) => {
             this.qualityValue.textContent = e.target.value + '%';
+            this.updateCompressionPreview();
+        });
+
+        // Format change with preview update
+        this.formatSelect.addEventListener('change', () => {
+            this.updateCompressionPreview();
         });
 
         // Compress button
@@ -102,6 +122,94 @@ class ImageCompressor {
         this.selectedFiles = validFiles;
         this.showControls();
         this.updateFileInfo();
+        this.createImagePreviews();
+    }
+
+    async createImagePreviews() {
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'image-previews';
+        previewContainer.innerHTML = '<h4>Selected Images:</h4>';
+
+        for (const file of this.selectedFiles) {
+            const previewItem = document.createElement('div');
+            previewItem.className = 'preview-item';
+
+            // Create image preview
+            const img = document.createElement('img');
+            img.className = 'preview-image';
+            img.src = URL.createObjectURL(file);
+            img.onload = () => URL.revokeObjectURL(img.src);
+
+            const fileInfo = document.createElement('div');
+            fileInfo.className = 'preview-info';
+            fileInfo.innerHTML = `
+                <div class="file-name">${file.name}</div>
+                <div class="file-details">
+                    <span class="original-size">Original: ${this.formatFileSize(file.size)}</span>
+                    <span class="estimated-size" data-filename="${file.name}">Estimated: Calculating...</span>
+                </div>
+            `;
+
+            previewItem.appendChild(img);
+            previewItem.appendChild(fileInfo);
+            previewContainer.appendChild(previewItem);
+        }
+
+        // Remove existing previews
+        const existingPreviews = this.controls.querySelector('.image-previews');
+        if (existingPreviews) {
+            existingPreviews.remove();
+        }
+
+        // Insert after file info
+        const fileInfo = this.controls.querySelector('.file-info');
+        fileInfo.insertAdjacentElement('afterend', previewContainer);
+
+        // Calculate initial estimates
+        this.updateCompressionPreview();
+    }
+
+    async updateCompressionPreview() {
+        if (!this.selectedFiles || this.selectedFiles.length === 0) return;
+
+        const quality = this.qualitySlider.value / 100;
+        const outputFormat = this.formatSelect.value;
+
+        // Update estimated sizes for each image
+        for (const file of this.selectedFiles) {
+            const estimatedSpan = document.querySelector(`[data-filename="${file.name}"]`);
+            if (estimatedSpan) {
+                estimatedSpan.textContent = 'Calculating...';
+                
+                try {
+                    // Quick estimation based on quality and format
+                    let estimatedSize = file.size * quality;
+                    
+                    // Adjust based on format
+                    switch (outputFormat) {
+                        case 'jpeg':
+                            estimatedSize *= 0.7; // JPEG typically smaller
+                            break;
+                        case 'webp':
+                            estimatedSize *= 0.6; // WebP very efficient
+                            break;
+                        case 'png':
+                            estimatedSize *= 1.1; // PNG might be larger
+                            break;
+                    }
+
+                    const savedBytes = file.size - estimatedSize;
+                    const savedPercentage = ((savedBytes / file.size) * 100).toFixed(1);
+                    
+                    estimatedSpan.innerHTML = `
+                        Estimated: ${this.formatFileSize(estimatedSize)} 
+                        <span class="savings">(~${savedPercentage}% saved)</span>
+                    `;
+                } catch (error) {
+                    estimatedSpan.textContent = 'Error calculating';
+                }
+            }
+        }
     }
 
     showControls() {
@@ -134,11 +242,18 @@ class ImageCompressor {
     resetUpload() {
         this.selectedFiles = [];
         this.compressedImages = [];
+        this.isProcessing = false;
         this.controls.style.display = 'none';
         this.progressContainer.style.display = 'none';
         this.results.style.display = 'none';
         this.uploadArea.style.display = 'block';
         this.fileInput.value = '';
+        
+        // Clean up any existing previews
+        const existingPreviews = this.controls.querySelector('.image-previews');
+        if (existingPreviews) {
+            existingPreviews.remove();
+        }
     }
 
     async compressImages() {
@@ -147,7 +262,13 @@ class ImageCompressor {
             return;
         }
 
+        if (this.isProcessing) {
+            return; // Prevent double processing
+        }
+
+        this.isProcessing = true;
         this.compressBtn.disabled = true;
+        this.compressBtn.textContent = 'Compressing...';
         this.progressContainer.style.display = 'block';
         this.results.style.display = 'none';
         this.compressedImages = [];
@@ -155,12 +276,18 @@ class ImageCompressor {
         const quality = this.qualitySlider.value / 100;
         const outputFormat = this.formatSelect.value;
 
+        console.log(`Starting compression with quality: ${quality}, format: ${outputFormat}`);
+
         try {
             for (let i = 0; i < this.selectedFiles.length; i++) {
                 const file = this.selectedFiles[i];
                 this.updateProgress((i / this.selectedFiles.length) * 100, `Processing ${file.name}...`);
 
+                console.log(`Processing file ${i + 1}/${this.selectedFiles.length}: ${file.name}`);
+                
                 const compressedBlob = await this.compressImage(file, quality, outputFormat);
+                
+                const compressionRatio = file.size > 0 ? ((file.size - compressedBlob.size) / file.size * 100).toFixed(1) : 0;
                 
                 this.compressedImages.push({
                     original: file,
@@ -168,8 +295,10 @@ class ImageCompressor {
                     name: this.generateFileName(file.name, outputFormat),
                     originalSize: file.size,
                     compressedSize: compressedBlob.size,
-                    compressionRatio: ((file.size - compressedBlob.size) / file.size * 100).toFixed(1)
+                    compressionRatio: compressionRatio
                 });
+
+                console.log(`Compressed ${file.name}: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressedBlob.size)} (${compressionRatio}% saved)`);
             }
 
             this.updateProgress(100, 'Compression complete!');
@@ -180,9 +309,11 @@ class ImageCompressor {
 
         } catch (error) {
             console.error('Compression error:', error);
-            this.showError('An error occurred during compression. Please try again.');
+            this.showError(`Compression failed: ${error.message}`);
         } finally {
+            this.isProcessing = false;
             this.compressBtn.disabled = false;
+            this.compressBtn.textContent = 'Compress Images';
         }
     }
 
@@ -212,7 +343,8 @@ class ImageCompressor {
                     canvas.width = width;
                     canvas.height = height;
 
-                    // Draw image on canvas
+                    // Clear canvas and draw image
+                    ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(img, 0, 0, width, height);
 
                     // Determine output format
@@ -231,35 +363,45 @@ class ImageCompressor {
                             mimeType = file.type;
                     }
 
-                    // Convert to blob
+                    // Convert to blob with quality setting
                     canvas.toBlob((blob) => {
                         if (blob) {
+                            console.log(`Compressed ${file.name}: ${file.size} → ${blob.size} bytes`);
                             resolve(blob);
                         } else {
-                            reject(new Error('Failed to compress image'));
+                            reject(new Error('Failed to compress image - blob creation failed'));
                         }
                     }, mimeType, quality);
 
                 } catch (error) {
+                    console.error('Canvas processing error:', error);
                     reject(error);
                 }
             };
 
-            img.onerror = () => reject(new Error('Failed to load image'));
-            
-            // Security: Create object URL safely
-            const objectUrl = URL.createObjectURL(file);
-            img.src = objectUrl;
-            
-            // Clean up object URL after image loads or fails
-            img.onload = () => {
-                URL.revokeObjectURL(objectUrl);
-                img.onload(); // Call the original onload
+            img.onerror = (error) => {
+                console.error('Image loading error:', error);
+                reject(new Error('Failed to load image'));
             };
-            img.onerror = () => {
-                URL.revokeObjectURL(objectUrl);
-                img.onerror(); // Call the original onerror
-            };
+            
+            // Create object URL safely
+            try {
+                const objectUrl = URL.createObjectURL(file);
+                img.src = objectUrl;
+                
+                // Clean up after processing
+                const cleanup = () => URL.revokeObjectURL(objectUrl);
+                img.onload = (...args) => {
+                    cleanup();
+                    img.onload.call(img, ...args);
+                };
+                img.onerror = (...args) => {
+                    cleanup();
+                    img.onerror.call(img, ...args);
+                };
+            } catch (error) {
+                reject(new Error('Failed to create object URL'));
+            }
         });
     }
 
