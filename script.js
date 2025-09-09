@@ -323,8 +323,10 @@ class ImageCompressor {
             const ctx = canvas.getContext('2d');
             const img = new Image();
 
-            img.onload = () => {
+            const handleLoad = () => {
                 try {
+                    console.log(`Loading image: ${file.name}, dimensions: ${img.width}x${img.height}`);
+                    
                     // Security: Limit canvas size to prevent memory issues
                     const maxDimension = 4096;
                     let { width, height } = img;
@@ -363,12 +365,15 @@ class ImageCompressor {
                             mimeType = file.type;
                     }
 
+                    console.log(`Converting to ${mimeType} with quality ${quality}`);
+
                     // Convert to blob with quality setting
                     canvas.toBlob((blob) => {
-                        if (blob) {
-                            console.log(`Compressed ${file.name}: ${file.size} → ${blob.size} bytes`);
+                        if (blob && blob.size > 0) {
+                            console.log(`✅ Compressed ${file.name}: ${file.size} → ${blob.size} bytes`);
                             resolve(blob);
                         } else {
+                            console.error(`❌ Failed to compress ${file.name}: blob is null or empty`);
                             reject(new Error('Failed to compress image - blob creation failed'));
                         }
                     }, mimeType, quality);
@@ -379,27 +384,37 @@ class ImageCompressor {
                 }
             };
 
-            img.onerror = (error) => {
+            const handleError = (error) => {
                 console.error('Image loading error:', error);
-                reject(new Error('Failed to load image'));
+                reject(new Error(`Failed to load image: ${file.name}`));
             };
+
+            // Set up event listeners
+            img.onload = handleLoad;
+            img.onerror = handleError;
             
-            // Create object URL safely
+            // Create object URL and load image
             try {
                 const objectUrl = URL.createObjectURL(file);
+                console.log(`Loading image from: ${objectUrl}`);
                 img.src = objectUrl;
                 
-                // Clean up after processing
-                const cleanup = () => URL.revokeObjectURL(objectUrl);
+                // Clean up object URL after processing
+                const originalOnload = img.onload;
+                const originalOnerror = img.onerror;
+                
                 img.onload = (...args) => {
-                    cleanup();
-                    img.onload.call(img, ...args);
+                    URL.revokeObjectURL(objectUrl);
+                    originalOnload.apply(img, args);
                 };
+                
                 img.onerror = (...args) => {
-                    cleanup();
-                    img.onerror.call(img, ...args);
+                    URL.revokeObjectURL(objectUrl);
+                    originalOnerror.apply(img, args);
                 };
+                
             } catch (error) {
+                console.error('Failed to create object URL:', error);
                 reject(new Error('Failed to create object URL'));
             }
         });
@@ -503,6 +518,8 @@ class ImageCompressor {
     }
 
     showError(message) {
+        console.error('Error:', message);
+        
         // Create and show error notification
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-notification';
@@ -518,6 +535,8 @@ class ImageCompressor {
             z-index: 1000;
             max-width: 400px;
             animation: slideIn 0.3s ease;
+            font-weight: 500;
+            line-height: 1.4;
         `;
         errorDiv.textContent = message;
 
@@ -529,6 +548,39 @@ class ImageCompressor {
                 errorDiv.remove();
             }
         }, 5000);
+    }
+
+    // Test function to verify compression is working
+    async testCompression() {
+        console.log('🧪 Testing compression functionality...');
+        
+        // Create a test canvas with a simple pattern
+        const testCanvas = document.createElement('canvas');
+        testCanvas.width = 100;
+        testCanvas.height = 100;
+        const ctx = testCanvas.getContext('2d');
+        
+        // Draw a simple pattern
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(0, 0, 50, 50);
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(50, 0, 50, 50);
+        ctx.fillStyle = '#0000ff';
+        ctx.fillRect(0, 50, 50, 50);
+        ctx.fillStyle = '#ffff00';
+        ctx.fillRect(50, 50, 50, 50);
+        
+        return new Promise((resolve) => {
+            testCanvas.toBlob((blob) => {
+                if (blob && blob.size > 0) {
+                    console.log('✅ Compression test successful - canvas.toBlob working');
+                    resolve(true);
+                } else {
+                    console.log('❌ Compression test failed - canvas.toBlob not working');
+                    resolve(false);
+                }
+            }, 'image/jpeg', 0.8);
+        });
     }
 }
 
@@ -623,8 +675,17 @@ document.head.appendChild(style);
 // Initialize the application when DOM is loaded
 let imageCompressor;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Initializing Image Compressor by Umar J...');
     imageCompressor = new ImageCompressor();
+    
+    // Test compression functionality on startup
+    const compressionWorks = await imageCompressor.testCompression();
+    if (!compressionWorks) {
+        imageCompressor.showError('Browser compression not supported. Please try a different browser.');
+    } else {
+        console.log('✅ Image Compressor ready!');
+    }
 });
 
 // Service Worker registration for PWA capabilities (optional)

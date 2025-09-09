@@ -208,7 +208,8 @@ body {
     background: var(--border-color);
     border-radius: 3px;
     outline: none;
-    webkit-appearance: none;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .slider::-webkit-slider-thumb {
