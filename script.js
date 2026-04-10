@@ -1,698 +1,270 @@
 class ImageCompressor {
-    constructor() {
-        this.initializeElements();
-        this.setupEventListeners();
-        this.compressedImages = [];
-        this.selectedFiles = [];
-        this.isProcessing = false;
-    }
-
-    initializeElements() {
-        this.uploadArea = document.getElementById('uploadArea');
-        this.fileInput = document.getElementById('fileInput');
-        this.uploadBtn = document.getElementById('uploadBtn');
-        this.controls = document.getElementById('controls');
-        this.qualitySlider = document.getElementById('qualitySlider');
-        this.qualityValue = document.getElementById('qualityValue');
-        this.formatSelect = document.getElementById('formatSelect');
-        this.compressBtn = document.getElementById('compressBtn');
-        this.progressContainer = document.getElementById('progressContainer');
-        this.progressFill = document.getElementById('progressFill');
-        this.progressText = document.getElementById('progressText');
-        this.results = document.getElementById('results');
-        this.resultsGrid = document.getElementById('resultsGrid');
-        this.downloadAllBtn = document.getElementById('downloadAllBtn');
-    }
-
-    setupEventListeners() {
-        // File input events - prevent double triggering
-        this.uploadBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!this.isProcessing) {
-                this.fileInput.click();
-            }
-        });
-        
-        this.uploadArea.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (!this.isProcessing && e.target === this.uploadArea) {
-                this.fileInput.click();
-            }
-        });
-        
-        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-
-        // Drag and drop events
-        this.uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
-        this.uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-        this.uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
-
-        // Quality slider with live preview
-        this.qualitySlider.addEventListener('input', (e) => {
-            this.qualityValue.textContent = e.target.value + '%';
-            this.updateCompressionPreview();
-        });
-
-        // Format change with preview update
-        this.formatSelect.addEventListener('change', () => {
-            this.updateCompressionPreview();
-        });
-
-        // Compress button
-        this.compressBtn.addEventListener('click', () => this.compressImages());
-
-        // Download all button
-        this.downloadAllBtn.addEventListener('click', () => this.downloadAll());
-
-        // Prevent default drag behaviors on document
-        document.addEventListener('dragover', (e) => e.preventDefault());
-        document.addEventListener('drop', (e) => e.preventDefault());
-    }
-
-    handleDragOver(e) {
-        e.preventDefault();
-        this.uploadArea.classList.add('drag-over');
-    }
-
-    handleDragLeave(e) {
-        e.preventDefault();
-        this.uploadArea.classList.remove('drag-over');
-    }
-
-    handleDrop(e) {
-        e.preventDefault();
-        this.uploadArea.classList.remove('drag-over');
-        const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-        if (files.length > 0) {
-            this.processFiles(files);
-        }
-    }
-
-    handleFileSelect(e) {
-        const files = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
-        if (files.length > 0) {
-            this.processFiles(files);
-        }
-    }
-
-    processFiles(files) {
-        // Security: Validate file types and sizes
-        const validFiles = files.filter(file => {
-            // Check file type
-            const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-            if (!validTypes.includes(file.type)) {
-                this.showError(`Invalid file type: ${file.name}. Only JPEG, PNG, WebP, and GIF are supported.`);
-                return false;
-            }
-
-            // Check file size (max 50MB per file)
-            const maxSize = 50 * 1024 * 1024; // 50MB
-            if (file.size > maxSize) {
-                this.showError(`File too large: ${file.name}. Maximum size is 50MB.`);
-                return false;
-            }
-
-            return true;
-        });
-
-        if (validFiles.length === 0) {
-            return;
-        }
-
-        this.selectedFiles = validFiles;
-        this.showControls();
-        this.updateFileInfo();
-        this.createImagePreviews();
-    }
-
-    async createImagePreviews() {
-        const previewContainer = document.createElement('div');
-        previewContainer.className = 'image-previews';
-        previewContainer.innerHTML = '<h4>Selected Images:</h4>';
-
-        for (const file of this.selectedFiles) {
-            const previewItem = document.createElement('div');
-            previewItem.className = 'preview-item';
-
-            // Create image preview
-            const img = document.createElement('img');
-            img.className = 'preview-image';
-            img.src = URL.createObjectURL(file);
-            img.onload = () => URL.revokeObjectURL(img.src);
-
-            const fileInfo = document.createElement('div');
-            fileInfo.className = 'preview-info';
-            fileInfo.innerHTML = `
-                <div class="file-name">${file.name}</div>
-                <div class="file-details">
-                    <span class="original-size">Original: ${this.formatFileSize(file.size)}</span>
-                    <span class="estimated-size" data-filename="${file.name}">Estimated: Calculating...</span>
-                </div>
-            `;
-
-            previewItem.appendChild(img);
-            previewItem.appendChild(fileInfo);
-            previewContainer.appendChild(previewItem);
-        }
-
-        // Remove existing previews
-        const existingPreviews = this.controls.querySelector('.image-previews');
-        if (existingPreviews) {
-            existingPreviews.remove();
-        }
-
-        // Insert after file info
-        const fileInfo = this.controls.querySelector('.file-info');
-        fileInfo.insertAdjacentElement('afterend', previewContainer);
-
-        // Calculate initial estimates
-        this.updateCompressionPreview();
-    }
-
-    async updateCompressionPreview() {
-        if (!this.selectedFiles || this.selectedFiles.length === 0) return;
-
-        const quality = this.qualitySlider.value / 100;
-        const outputFormat = this.formatSelect.value;
-
-        // Update estimated sizes for each image
-        for (const file of this.selectedFiles) {
-            const estimatedSpan = document.querySelector(`[data-filename="${file.name}"]`);
-            if (estimatedSpan) {
-                estimatedSpan.textContent = 'Calculating...';
-                
-                try {
-                    // Quick estimation based on quality and format
-                    let estimatedSize = file.size * quality;
-                    
-                    // Adjust based on format
-                    switch (outputFormat) {
-                        case 'jpeg':
-                            estimatedSize *= 0.7; // JPEG typically smaller
-                            break;
-                        case 'webp':
-                            estimatedSize *= 0.6; // WebP very efficient
-                            break;
-                        case 'png':
-                            estimatedSize *= 1.1; // PNG might be larger
-                            break;
-                    }
-
-                    const savedBytes = file.size - estimatedSize;
-                    const savedPercentage = ((savedBytes / file.size) * 100).toFixed(1);
-                    
-                    estimatedSpan.innerHTML = `
-                        Estimated: ${this.formatFileSize(estimatedSize)} 
-                        <span class="savings">(~${savedPercentage}% saved)</span>
-                    `;
-                } catch (error) {
-                    estimatedSpan.textContent = 'Error calculating';
-                }
-            }
-        }
-    }
-
-    showControls() {
-        this.controls.style.display = 'block';
-        this.uploadArea.style.display = 'none';
-    }
-
-    updateFileInfo() {
-        const fileCount = this.selectedFiles.length;
-        const totalSize = this.selectedFiles.reduce((sum, file) => sum + file.size, 0);
-        
-        // Update UI to show selected files info
-        const infoDiv = document.createElement('div');
-        infoDiv.className = 'file-info';
-        infoDiv.innerHTML = `
-            <p><strong>${fileCount}</strong> file(s) selected</p>
-            <p>Total size: <strong>${this.formatFileSize(totalSize)}</strong></p>
-            <button type="button" class="change-files-btn" onclick="imageCompressor.resetUpload()">Change Files</button>
-        `;
-        
-        // Remove existing info if present
-        const existingInfo = this.controls.querySelector('.file-info');
-        if (existingInfo) {
-            existingInfo.remove();
-        }
-        
-        this.controls.insertBefore(infoDiv, this.controls.firstChild);
-    }
-
-    resetUpload() {
-        this.selectedFiles = [];
-        this.compressedImages = [];
-        this.isProcessing = false;
-        this.controls.style.display = 'none';
-        this.progressContainer.style.display = 'none';
-        this.results.style.display = 'none';
-        this.uploadArea.style.display = 'block';
-        this.fileInput.value = '';
-        
-        // Clean up any existing previews
-        const existingPreviews = this.controls.querySelector('.image-previews');
-        if (existingPreviews) {
-            existingPreviews.remove();
-        }
-    }
-
-    async compressImages() {
-        if (!this.selectedFiles || this.selectedFiles.length === 0) {
-            this.showError('No files selected');
-            return;
-        }
-
-        if (this.isProcessing) {
-            return; // Prevent double processing
-        }
-
-        this.isProcessing = true;
-        this.compressBtn.disabled = true;
-        this.compressBtn.textContent = 'Compressing...';
-        this.progressContainer.style.display = 'block';
-        this.results.style.display = 'none';
-        this.compressedImages = [];
-
-        const quality = this.qualitySlider.value / 100;
-        const outputFormat = this.formatSelect.value;
-
-        console.log(`Starting compression with quality: ${quality}, format: ${outputFormat}`);
-
-        try {
-            for (let i = 0; i < this.selectedFiles.length; i++) {
-                const file = this.selectedFiles[i];
-                this.updateProgress((i / this.selectedFiles.length) * 100, `Processing ${file.name}...`);
-
-                console.log(`Processing file ${i + 1}/${this.selectedFiles.length}: ${file.name}`);
-                
-                const compressedBlob = await this.compressImage(file, quality, outputFormat);
-                
-                const compressionRatio = file.size > 0 ? ((file.size - compressedBlob.size) / file.size * 100).toFixed(1) : 0;
-                
-                this.compressedImages.push({
-                    original: file,
-                    compressed: compressedBlob,
-                    name: this.generateFileName(file.name, outputFormat),
-                    originalSize: file.size,
-                    compressedSize: compressedBlob.size,
-                    compressionRatio: compressionRatio
-                });
-
-                console.log(`Compressed ${file.name}: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressedBlob.size)} (${compressionRatio}% saved)`);
-            }
-
-            this.updateProgress(100, 'Compression complete!');
-            setTimeout(() => {
-                this.progressContainer.style.display = 'none';
-                this.showResults();
-            }, 1000);
-
-        } catch (error) {
-            console.error('Compression error:', error);
-            this.showError(`Compression failed: ${error.message}`);
-        } finally {
-            this.isProcessing = false;
-            this.compressBtn.disabled = false;
-            this.compressBtn.textContent = 'Compress Images';
-        }
-    }
-
-    async compressImage(file, quality, outputFormat) {
-        return new Promise((resolve, reject) => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-
-            const handleLoad = () => {
-                try {
-                    console.log(`Loading image: ${file.name}, dimensions: ${img.width}x${img.height}`);
-                    
-                    // Security: Limit canvas size to prevent memory issues
-                    const maxDimension = 4096;
-                    let { width, height } = img;
-
-                    if (width > maxDimension || height > maxDimension) {
-                        const aspectRatio = width / height;
-                        if (width > height) {
-                            width = maxDimension;
-                            height = maxDimension / aspectRatio;
-                        } else {
-                            height = maxDimension;
-                            width = maxDimension * aspectRatio;
-                        }
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-
-                    // Clear canvas and draw image
-                    ctx.clearRect(0, 0, width, height);
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Determine output format
-                    let mimeType;
-                    switch (outputFormat) {
-                        case 'jpeg':
-                            mimeType = 'image/jpeg';
-                            break;
-                        case 'png':
-                            mimeType = 'image/png';
-                            break;
-                        case 'webp':
-                            mimeType = 'image/webp';
-                            break;
-                        default:
-                            mimeType = file.type;
-                    }
-
-                    console.log(`Converting to ${mimeType} with quality ${quality}`);
-
-                    // Convert to blob with quality setting
-                    canvas.toBlob((blob) => {
-                        if (blob && blob.size > 0) {
-                            console.log(`✅ Compressed ${file.name}: ${file.size} → ${blob.size} bytes`);
-                            resolve(blob);
-                        } else {
-                            console.error(`❌ Failed to compress ${file.name}: blob is null or empty`);
-                            reject(new Error('Failed to compress image - blob creation failed'));
-                        }
-                    }, mimeType, quality);
-
-                } catch (error) {
-                    console.error('Canvas processing error:', error);
-                    reject(error);
-                }
-            };
-
-            const handleError = (error) => {
-                console.error('Image loading error:', error);
-                reject(new Error(`Failed to load image: ${file.name}`));
-            };
-
-            // Set up event listeners
-            img.onload = handleLoad;
-            img.onerror = handleError;
-            
-            // Create object URL and load image
-            try {
-                const objectUrl = URL.createObjectURL(file);
-                console.log(`Loading image from: ${objectUrl}`);
-                img.src = objectUrl;
-                
-                // Clean up object URL after processing
-                const originalOnload = img.onload;
-                const originalOnerror = img.onerror;
-                
-                img.onload = (...args) => {
-                    URL.revokeObjectURL(objectUrl);
-                    originalOnload.apply(img, args);
-                };
-                
-                img.onerror = (...args) => {
-                    URL.revokeObjectURL(objectUrl);
-                    originalOnerror.apply(img, args);
-                };
-                
-            } catch (error) {
-                console.error('Failed to create object URL:', error);
-                reject(new Error('Failed to create object URL'));
-            }
-        });
-    }
-
-    generateFileName(originalName, outputFormat) {
-        const nameWithoutExt = originalName.replace(/\.[^/.]+$/, "");
-        let extension;
-
-        switch (outputFormat) {
-            case 'jpeg':
-                extension = '.jpg';
-                break;
-            case 'png':
-                extension = '.png';
-                break;
-            case 'webp':
-                extension = '.webp';
-                break;
-            default:
-                extension = originalName.match(/\.[^/.]+$/)?.[0] || '.jpg';
-        }
-
-        return nameWithoutExt + '_compressed' + extension;
-    }
-
-    updateProgress(percentage, text) {
-        this.progressFill.style.width = percentage + '%';
-        this.progressText.textContent = text;
-    }
-
-    showResults() {
-        this.results.style.display = 'block';
-        this.resultsGrid.innerHTML = '';
-
-        this.compressedImages.forEach((item, index) => {
-            const resultItem = document.createElement('div');
-            resultItem.className = 'result-item';
-
-            const compressionPercentage = parseFloat(item.compressionRatio);
-            let compressionClass, compressionText;
-
-            if (compressionPercentage >= 30) {
-                compressionClass = 'compression-excellent';
-                compressionText = 'Excellent';
-            } else if (compressionPercentage >= 10) {
-                compressionClass = 'compression-good';
-                compressionText = 'Good';
-            } else {
-                compressionClass = 'compression-minimal';
-                compressionText = 'Minimal';
-            }
-
-            resultItem.innerHTML = `
-                <div class="result-info">
-                    <div class="result-name">${item.name}</div>
-                    <div class="result-stats">
-                        ${this.formatFileSize(item.originalSize)} → ${this.formatFileSize(item.compressedSize)}
-                        <span class="compression-badge ${compressionClass}">${compressionText} (${item.compressionRatio}% saved)</span>
-                    </div>
-                </div>
-                <button class="download-btn" onclick="imageCompressor.downloadSingle(${index})">Download</button>
-            `;
-
-            this.resultsGrid.appendChild(resultItem);
-        });
-    }
-
-    downloadSingle(index) {
-        const item = this.compressedImages[index];
-        const url = URL.createObjectURL(item.compressed);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = item.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    async downloadAll() {
-        if (this.compressedImages.length === 0) return;
-
-        // For multiple files, create a ZIP (simplified approach - download individually)
-        for (let i = 0; i < this.compressedImages.length; i++) {
-            await new Promise(resolve => {
-                setTimeout(() => {
-                    this.downloadSingle(i);
-                    resolve();
-                }, i * 100); // Small delay between downloads
-            });
-        }
-    }
-
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    showError(message) {
-        console.error('Error:', message);
-        
-        // Create and show error notification
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-notification';
-        errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #ef4444;
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            max-width: 400px;
-            animation: slideIn 0.3s ease;
-            font-weight: 500;
-            line-height: 1.4;
-        `;
-        errorDiv.textContent = message;
-
-        document.body.appendChild(errorDiv);
-
-        // Remove after 5 seconds
-        setTimeout(() => {
-            if (errorDiv.parentNode) {
-                errorDiv.remove();
-            }
-        }, 5000);
-    }
-
-    // Test function to verify compression is working
-    async testCompression() {
-        console.log('🧪 Testing compression functionality...');
-        
-        // Create a test canvas with a simple pattern
-        const testCanvas = document.createElement('canvas');
-        testCanvas.width = 100;
-        testCanvas.height = 100;
-        const ctx = testCanvas.getContext('2d');
-        
-        // Draw a simple pattern
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(0, 0, 50, 50);
-        ctx.fillStyle = '#00ff00';
-        ctx.fillRect(50, 0, 50, 50);
-        ctx.fillStyle = '#0000ff';
-        ctx.fillRect(0, 50, 50, 50);
-        ctx.fillStyle = '#ffff00';
-        ctx.fillRect(50, 50, 50, 50);
-        
-        return new Promise((resolve) => {
-            testCanvas.toBlob((blob) => {
-                if (blob && blob.size > 0) {
-                    console.log('✅ Compression test successful - canvas.toBlob working');
-                    resolve(true);
-                } else {
-                    console.log('❌ Compression test failed - canvas.toBlob not working');
-                    resolve(false);
-                }
-            }, 'image/jpeg', 0.8);
-        });
-    }
-}
-
-// Security: Content Security Policy helpers
-const CSP = {
-    // Sanitize user input (though we don't accept text input in this app)
-    sanitizeString: (str) => {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    },
-
-    // Validate file types
-    isValidImageType: (type) => {
-        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-        return validTypes.includes(type);
-    },
-
-    // Rate limiting for API calls (if needed)
-    rateLimiter: {
-        calls: 0,
-        lastReset: Date.now(),
-        limit: 100, // 100 operations per minute
-        
-        canProceed: function() {
-            const now = Date.now();
-            if (now - this.lastReset > 60000) { // Reset every minute
-                this.calls = 0;
-                this.lastReset = now;
-            }
-            
-            if (this.calls >= this.limit) {
-                return false;
-            }
-            
-            this.calls++;
-            return true;
-        }
-    }
-};
-
-// Add CSS animation for error notifications
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    .file-info {
-        background: #f0f9ff;
-        border: 1px solid #0ea5e9;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .file-info p {
-        margin: 0.25rem 0;
-        color: #0c4a6e;
-    }
-    
-    .change-files-btn {
-        background: #0ea5e9;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 500;
-        margin-top: 0.5rem;
-        transition: background-color 0.2s;
-    }
-    
-    .change-files-btn:hover {
-        background: #0284c7;
-    }
-    
-    .error-notification {
-        font-weight: 500;
-        line-height: 1.4;
-    }
-`;
-document.head.appendChild(style);
-
-// Initialize the application when DOM is loaded
-let imageCompressor;
-
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Initializing Image Compressor by Umar J...');
-    imageCompressor = new ImageCompressor();
-    
-    // Test compression functionality on startup
-    const compressionWorks = await imageCompressor.testCompression();
-    if (!compressionWorks) {
-        imageCompressor.showError('Browser compression not supported. Please try a different browser.');
-    } else {
-        console.log('✅ Image Compressor ready!');
-    }
-});
-
-// Service Worker registration for PWA capabilities (optional)
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        // Note: Service worker implementation would go here for offline capabilities
-        // This is commented out as it requires additional setup
-        // navigator.serviceWorker.register('/sw.js');
+  constructor() {
+    this.selectedFiles = [];
+    this.compressedImages = [];
+    this.isProcessing = false;
+
+    this.uploadArea   = document.getElementById('uploadArea');
+    this.dropZone     = document.getElementById('dropZone');
+    this.fileInput    = document.getElementById('fileInput');
+    this.uploadBtn    = document.getElementById('uploadBtn');
+    this.controlsCard = document.getElementById('controlsCard');
+    this.fileInfoBadge= document.getElementById('fileInfoBadge');
+    this.previewList  = document.getElementById('previewList');
+    this.resetBtn     = document.getElementById('resetBtn');
+    this.qualitySlider= document.getElementById('qualitySlider');
+    this.qualityValue = document.getElementById('qualityValue');
+    this.sliderFill   = document.getElementById('sliderFill');
+    this.formatSelect = document.getElementById('formatSelect');
+    this.compressBtn  = document.getElementById('compressBtn');
+    this.progressCard = document.getElementById('progressCard');
+    this.progressFill = document.getElementById('progressFill');
+    this.progressText = document.getElementById('progressText');
+    this.resultsCard  = document.getElementById('resultsCard');
+    this.resultsGrid  = document.getElementById('resultsGrid');
+    this.downloadAllBtn = document.getElementById('downloadAllBtn');
+    this.newBatchBtn  = document.getElementById('newBatchBtn');
+
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    this.uploadBtn.addEventListener('click', e => { e.stopPropagation(); this.fileInput.click(); });
+    this.dropZone.addEventListener('click', e => { if (e.target === this.dropZone) this.fileInput.click(); });
+    this.fileInput.addEventListener('change', e => this.handleFiles(Array.from(e.target.files)));
+
+    this.dropZone.addEventListener('dragover', e => { e.preventDefault(); this.dropZone.classList.add('drag-over'); });
+    this.dropZone.addEventListener('dragleave', () => this.dropZone.classList.remove('drag-over'));
+    this.dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      this.dropZone.classList.remove('drag-over');
+      this.handleFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')));
     });
+
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop', e => e.preventDefault());
+
+    this.qualitySlider.addEventListener('input', () => {
+      const v = this.qualitySlider.value;
+      this.qualityValue.textContent = v + '%';
+      const pct = ((v - 10) / 90) * 100;
+      this.sliderFill.style.width = pct + '%';
+      this.updateEstimates();
+    });
+    this.formatSelect.addEventListener('change', () => this.updateEstimates());
+
+    this.compressBtn.addEventListener('click', () => this.compress());
+    this.resetBtn.addEventListener('click', () => this.reset());
+    this.downloadAllBtn.addEventListener('click', () => this.downloadAll());
+    this.newBatchBtn.addEventListener('click', () => this.reset());
+  }
+
+  handleFiles(files) {
+    const valid = files.filter(f => {
+      const ok = ['image/jpeg','image/png','image/webp','image/gif'].includes(f.type);
+      const size = f.size <= 50 * 1024 * 1024;
+      if (!ok)   this.toast(`Unsupported type: ${f.name}`);
+      if (!size) this.toast(`Too large (max 50MB): ${f.name}`);
+      return ok && size;
+    });
+    if (!valid.length) return;
+
+    this.selectedFiles = valid;
+    this.show(this.controlsCard);
+    this.hide(this.uploadArea);
+    this.hide(this.progressCard);
+    this.hide(this.resultsCard);
+
+    const total = valid.reduce((s, f) => s + f.size, 0);
+    this.fileInfoBadge.textContent = `${valid.length} file${valid.length > 1 ? 's' : ''} · ${this.fmt(total)} total`;
+
+    this.previewList.innerHTML = '';
+    valid.forEach(f => {
+      const item = document.createElement('div');
+      item.className = 'preview-item';
+      const img = document.createElement('img');
+      img.className = 'preview-thumb';
+      img.src = URL.createObjectURL(f);
+      img.onload = () => URL.revokeObjectURL(img.src);
+
+      item.innerHTML = `
+        <div class="preview-meta">
+          <div class="preview-name">${f.name}</div>
+          <div class="preview-size">${this.fmt(f.size)}</div>
+          <div class="preview-est" data-fname="${f.name}">Estimating…</div>
+        </div>
+      `;
+      item.prepend(img);
+      this.previewList.appendChild(item);
+    });
+
+    this.updateEstimates();
+  }
+
+  updateEstimates() {
+    if (!this.selectedFiles.length) return;
+    const q = this.qualitySlider.value / 100;
+    const fmt = this.formatSelect.value;
+    this.selectedFiles.forEach(f => {
+      const el = document.querySelector(`[data-fname="${f.name}"]`);
+      if (!el) return;
+      let est = f.size * q;
+      if (fmt === 'jpeg') est *= 0.7;
+      else if (fmt === 'webp') est *= 0.6;
+      else if (fmt === 'png') est *= 1.1;
+      const saved = ((f.size - est) / f.size * 100).toFixed(0);
+      el.textContent = `≈ ${this.fmt(est)} · ${saved}% saved`;
+    });
+  }
+
+  async compress() {
+    if (!this.selectedFiles.length || this.isProcessing) return;
+    this.isProcessing = true;
+    this.compressBtn.disabled = true;
+    this.compressBtn.textContent = 'Compressing…';
+    this.hide(this.resultsCard);
+    this.show(this.progressCard);
+    this.compressedImages = [];
+
+    const q = this.qualitySlider.value / 100;
+    const fmt = this.formatSelect.value;
+
+    try {
+      for (let i = 0; i < this.selectedFiles.length; i++) {
+        const f = this.selectedFiles[i];
+        const pct = (i / this.selectedFiles.length) * 100;
+        this.updateProgress(pct, `Compressing ${f.name}…`);
+        const blob = await this.compressOne(f, q, fmt);
+        const ratio = ((f.size - blob.size) / f.size * 100).toFixed(1);
+        this.compressedImages.push({
+          original: f,
+          compressed: blob,
+          name: this.newName(f.name, fmt),
+          originalSize: f.size,
+          compressedSize: blob.size,
+          ratio
+        });
+      }
+      this.updateProgress(100, 'Done!');
+      setTimeout(() => {
+        this.hide(this.progressCard);
+        this.showResults();
+      }, 700);
+    } catch (err) {
+      this.toast('Compression failed: ' + err.message);
+    } finally {
+      this.isProcessing = false;
+      this.compressBtn.disabled = false;
+      this.compressBtn.textContent = 'Compress Images';
+    }
+  }
+
+  compressOne(file, quality, outputFormat) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        let { naturalWidth: w, naturalHeight: h } = img;
+        const MAX = 4096;
+        if (w > MAX || h > MAX) {
+          const r = Math.min(MAX / w, MAX / h);
+          w = Math.round(w * r);
+          h = Math.round(h * r);
+        }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const mime = outputFormat === 'jpeg' ? 'image/jpeg'
+                   : outputFormat === 'png'  ? 'image/png'
+                   : outputFormat === 'webp' ? 'image/webp'
+                   : file.type;
+        canvas.toBlob(blob => {
+          if (blob && blob.size > 0) resolve(blob);
+          else reject(new Error('Empty blob'));
+        }, mime, quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to load ${file.name}`)); };
+      img.src = url;
+    });
+  }
+
+  showResults() {
+    this.resultsGrid.innerHTML = '';
+    this.compressedImages.forEach((item, i) => {
+      const r = parseFloat(item.ratio);
+      const [cls, label] = r >= 30 ? ['badge-great','Great'] : r >= 10 ? ['badge-ok','Good'] : ['badge-low','Minimal'];
+      const div = document.createElement('div');
+      div.className = 'result-item';
+      div.innerHTML = `
+        <div class="result-info">
+          <div class="result-name">${item.name}</div>
+          <div class="result-stats">${this.fmt(item.originalSize)} → ${this.fmt(item.compressedSize)}</div>
+        </div>
+        <span class="result-badge ${cls}">${label} −${item.ratio}%</span>
+        <button class="btn-dl-single" data-index="${i}">↓ Save</button>
+      `;
+      this.resultsGrid.appendChild(div);
+    });
+    this.resultsGrid.querySelectorAll('.btn-dl-single').forEach(btn => {
+      btn.addEventListener('click', () => this.downloadOne(+btn.dataset.index));
+    });
+    this.show(this.resultsCard);
+  }
+
+  downloadOne(i) {
+    const { compressed, name } = this.compressedImages[i];
+    const url = URL.createObjectURL(compressed);
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  downloadAll() {
+    this.compressedImages.forEach((_, i) => setTimeout(() => this.downloadOne(i), i * 120));
+  }
+
+  reset() {
+    this.selectedFiles = [];
+    this.compressedImages = [];
+    this.isProcessing = false;
+    this.fileInput.value = '';
+    this.show(this.uploadArea);
+    this.hide(this.controlsCard);
+    this.hide(this.progressCard);
+    this.hide(this.resultsCard);
+  }
+
+  updateProgress(pct, text) {
+    this.progressFill.style.width = pct + '%';
+    this.progressText.textContent = text;
+  }
+
+  show(el) { el.classList.remove('hidden'); }
+  hide(el) { el.classList.add('hidden'); }
+
+  fmt(bytes) {
+    if (!bytes) return '0 B';
+    const u = ['B','KB','MB','GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+  }
+
+  newName(name, fmt) {
+    const base = name.replace(/\.[^/.]+$/, '');
+    const ext = fmt === 'jpeg' ? '.jpg' : fmt === 'png' ? '.png' : fmt === 'webp' ? '.webp'
+              : name.match(/\.[^/.]+$/)?.[0] || '.jpg';
+    return base + '_squished' + ext;
+  }
+
+  toast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4500);
+  }
 }
+
+document.addEventListener('DOMContentLoaded', () => { new ImageCompressor(); });
